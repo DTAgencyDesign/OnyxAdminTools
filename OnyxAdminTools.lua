@@ -4,7 +4,7 @@
 
 script_name('OnyxAdminTools')
 script_author('Dmitriy Tsyganov')
-script_version('1.4.2')
+script_version('1.4.4')
 
 local inicfg = require 'inicfg'
 local sampev = require 'lib.samp.events'
@@ -24,7 +24,7 @@ local default_cfg = {
     prefix_tag = '[ONYX AdminTools]',
     show_connect_msg = true,
     vk_group = 'vk.com/onx_rp',
-    delay_ms = 2000,
+    delay_ms = 1500,
   },
   texts = {
     author_name = 'Дмитрий Цыганов',
@@ -68,25 +68,25 @@ local default_cfg = {
     helper = 'автоответ по Помощнику',
     spt = 'телепорт игрока на спавн',
     dm = 'ДМ (40 мин)', 
-	dmzz = 'ДМ в ЗЗ (60 мин)', 
-	mdm = 'Масс. ДМ (60 мин)',
+    dmzz = 'ДМ в ЗЗ (60 мин)', 
+    mdm = 'Масс. ДМ (60 мин)',
     db = 'ДБ (40 мин)', 
-	mdb = 'Масс. ДБ (60 мин)', 
-	tk = 'ТК (30 мин)',
+    mdb = 'Масс. ДБ (60 мин)', 
+    tk = 'ТК (30 мин)',
     sk = 'СК (50 мин)', 
-	rk = 'РК (30 мин)', 
-	sanim = 'Сбив Анимации (20 мин)',
+    rk = 'РК (30 мин)', 
+    sanim = 'Сбив Анимации (20 мин)',
     nrd = 'НРД (40 мин)', 
-	sriv = 'Срыв Набора (50 мин)',
+    sriv = 'Срыв Набора (50 мин)',
     caps = 'Капс (20 мин)', 
-	flood = 'Флуд (20 мин)', 
-	mg = 'МГ (10 мин)',
+    flood = 'Флуд (20 мин)', 
+    mg = 'МГ (10 мин)',
     adeq = 'Неадекватность (40 мин)', 
-	oskp = 'Оск. игрока (40 мин)',
+    oskp = 'Оск. игрока (40 мин)',
     oska = 'Оск. администрации (70 мин)', 
-	oskf = 'Оск. родных (120 мин)',
+    oskf = 'Оск. родных (120 мин)',
     offtop1 = 'оффтоп 1/2', 
-	offtop2 = 'оффтоп 2/2 + /offreport'
+    offtop2 = 'оффтоп 2/2 + /offreport'
   }
 }
 
@@ -128,7 +128,7 @@ local function show_connect_banner_once()
 end
 
 local function sequence_for(id, steps)
-  local delay = tonumber(cfg.main.delay_ms or 2000)
+  local delay = tonumber(cfg.main.delay_ms or 1500)
   lua_thread.create(function()
     for _, cmd in ipairs(steps) do send_cmd(cmd) wait_ms(delay) end
   end)
@@ -139,43 +139,31 @@ function handle_command(name, arg)
 
   if name == 'athelp' then
     local title = string.format('%s[ONYX AdminTools]', COL.ORANGE)
-    local sub = string.format(
-      '%sНиже перечислены все команды скрипта\n%sАвтор: %s%s\n\nСделано с любовью для %sONYX Role Play 0.3.7\n\n',
-      COL.WHITE, COL.WHITE, COL.WHITE, cfg.texts.author_name, COL.ORANGE
-    )
+    local sub = string.format('%sНиже перечислены все команды скрипта\n%sАвтор: %s%s\n\nСделано с любовью для %sONYX Role Play 0.3.7\n\n',
+      COL.WHITE, COL.WHITE, COL.WHITE, cfg.texts.author_name, COL.ORANGE)
 
-    local auto = ''
-    local jail = ''
-    local mute = ''
-
+    local auto, jail, mute = '', '', ''
     for cmd, desc in pairs(cfg.descriptions) do
-      if cmd == 'lid' or cmd == 'admin' or cmd == 'helper' or cmd == 'spt' or cmd:find('offtop') then
-        auto = auto .. string.format('%sКоманда %s/%s %s- %s\n', COL.WHITE, COL.GRAY, cmd, COL.WHITE, desc)
-      elseif cmd == 'caps' or cmd == 'flood' or cmd == 'mg' or cmd == 'adeq'
-          or cmd == 'oskp' or cmd == 'oska' or cmd == 'oskf' then
-        mute = mute .. string.format('%sКоманда %s/%s %s- %s\n', COL.WHITE, COL.GRAY, cmd, COL.WHITE, desc)
-      elseif cmd ~= 'athelp' and cmd ~= 'atrel' then
-        jail = jail .. string.format('%sКоманда %s/%s %s- %s\n', COL.WHITE, COL.GRAY, cmd, COL.WHITE, desc)
-      end
+      local line = string.format('%sКоманда %s/%s %s- %s\n', COL.WHITE, COL.GRAY, cmd, COL.WHITE, desc)
+      if cmd == 'lid' or cmd == 'admin' or cmd == 'helper' or cmd == 'spt' or cmd:find('offtop') then auto = auto .. line
+      elseif cmd == 'caps' or cmd == 'flood' or cmd == 'mg' or cmd == 'adeq' or cmd:match('osk') then mute = mute .. line
+      elseif cmd ~= 'athelp' and cmd ~= 'atrel' then jail = jail .. line end
     end
 
-    local body = ''
-    body = body .. COL.ORANGE .. 'Автоответы по репортам:\n' .. auto .. '\n'
-    body = body .. COL.ORANGE .. 'Тюремные наказания:\n' .. jail .. '\n'
-    body = body .. COL.ORANGE .. 'Наказания лишающие права писать в чат:\n' .. mute .. '\n'
-
+    local body = COL.ORANGE .. 'Автоответы по репортам:\n' .. auto .. '\n'
+              .. COL.ORANGE .. 'Тюремные наказания:\n' .. jail .. '\n'
+              .. COL.ORANGE .. 'Наказания лишающие права писать в чат:\n' .. mute .. '\n'
     sampShowDialog(DIALOG_ID, title, sub .. body, 'ОК', '')
     return
   end
+
   if name == 'atrel' then
-    if load_config() then
-      chat(COL.GREEN .. 'Конфиг успешно перезагружен.')
-    else
-      chat(COL.RED .. 'Ошибка перезагрузки конфига.')
-    end
+    chat(load_config() and COL.GREEN .. 'Конфиг успешно перезагружен.' or COL.RED .. 'Ошибка перезагрузки конфига.')
     return
   end
+
   if not id then chat(COL.RED .. 'Использование: /' .. name .. ' [id]') return end
+
   if name == 'lid' or name == 'admin' or name == 'helper' then
     sequence_for(id, {
       string.format('/gj %d', id),
@@ -186,7 +174,7 @@ function handle_command(name, arg)
   elseif name == 'spt' then
     sequence_for(id, {
       string.format('/gj %d', id),
-	  string.format('/pm %d %s', id, get_reason('spt_line1')),
+      string.format('/pm %d %s', id, get_reason('spt_line1')),
       string.format('/sp %d', id),
       string.format('/pm %d %s', id, get_reason('spt_line2')),
       string.format('/gg %d', id),
@@ -194,13 +182,17 @@ function handle_command(name, arg)
   elseif name:find('offtop') then
     sequence_for(id, { string.format('/pm %d %s', id, get_reason(name .. '_line', '...')) })
   elseif name == 'caps' or name == 'flood' or name == 'mg' or name == 'adeq' or name:match('osk') then
+    local desc = cfg.descriptions[name] or default_cfg.descriptions[name] or ''
+    local duration = tonumber(desc:match('(%d+)%s*мин')) or 20
     sequence_for(id, {
-      string.format('/mute %d 20 %s', id, get_reason(name .. '_reason', '...')),
+      string.format('/mute %d %d %s', id, duration, get_reason(name .. '_reason', '...')),
       string.format('/gg %d', id),
     })
   else
+    local desc = cfg.descriptions[name] or default_cfg.descriptions[name] or ''
+    local duration = tonumber(desc:match('(%d+)%s*мин')) or 40
     sequence_for(id, {
-      string.format('/jail %d 40 %s', id, get_reason(name .. '_reason', '...')),
+      string.format('/jail %d %d %s', id, duration, get_reason(name .. '_reason', '...')),
       string.format('/gg %d', id),
     })
   end
@@ -208,15 +200,13 @@ end
 
 function main()
   while not isSampAvailable() do wait(250) end
-  if not load_config() then
-    chat(COL.RED .. 'Ошибка загрузки конфигурации!')
-    return
-  end
+  if not load_config() then chat(COL.RED .. 'Ошибка загрузки конфигурации!') return end
   show_connect_banner_once()
-
   local commands = {
-    'athelp','atrel','lid','admin','helper','spt','dm','dmzz','mdm','db','mdb','tk','sk','rk','sanim','nrd','sriv',
-    'caps','flood','mg','adeq','oskp','oska','oskf','offtop1','offtop2'
+    'athelp','atrel','lid','admin','helper','spt',
+    'dm','dmzz','mdm','db','mdb','tk','sk','rk','sanim','nrd','sriv',
+    'caps','flood','mg','adeq','oskp','oska','oskf',
+    'offtop1','offtop2'
   }
   for _, cmd in ipairs(commands) do
     sampRegisterChatCommand(cmd, function(arg) handle_command(cmd, arg) end)
