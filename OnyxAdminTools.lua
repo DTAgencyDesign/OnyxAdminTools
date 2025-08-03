@@ -4,10 +4,13 @@
 
 script_name('OnyxAdminTools')
 script_author('Dmitriy Tsyganov')
-script_version('1.4.4')
+script_version('1.4.9')
 
 local inicfg = require 'inicfg'
 local sampev = require 'lib.samp.events'
+local hasSamp, samp = pcall(require, 'lib.samp')
+if not hasSamp then samp = nil end
+local sampfuncs = require 'sampfuncs'
 
 local CONFIG_NAME = 'OnyxAdminTools'
 local CONFIG_DIR = 'moonloader/config'
@@ -67,6 +70,7 @@ local default_cfg = {
     admin = 'автоответ по Админке',
     helper = 'автоответ по Помощнику',
     spt = 'телепорт игрока на спавн',
+    ah = '[id] [1 или 2] 1 - история ников 2 - список наказаний',
     dm = 'ДМ (40 мин)', 
     dmzz = 'ДМ в ЗЗ (60 мин)', 
     mdm = 'Масс. ДМ (60 мин)',
@@ -102,7 +106,6 @@ local function wait_ms(ms) wait(ms) end
 local function parse_id(arg) return tonumber(arg) end
 local function ensure_config_dir() os.execute(string.format('mkdir "%s" 2>nul', CONFIG_DIR)) end
 local function get_reason(key, fallback) return (cfg.texts and cfg.texts[key]) or fallback end
-
 local function load_config()
   ensure_config_dir()
   local data = inicfg.load(default_cfg, cfg_path)
@@ -117,16 +120,6 @@ local function load_config()
   return true
 end
 
-local function show_connect_banner_once()
-  if banner_shown then return end
-  banner_shown = true
-  if not (cfg.main and cfg.main.show_connect_msg) then return end
-
-  chat(string.format('%s%s %s%s', COL.ORANGE, cfg.main.prefix_tag, COL.WHITE, 'Успешно подключён!'))
-  chat(string.format('%s%s %s%s %s%s', COL.ORANGE, cfg.main.prefix_tag, COL.WHITE, 'Скрипт был разработан: ', COL.ORANGE, cfg.texts.author_name))
-  chat(string.format('%s%s %s%s %s%s', COL.ORANGE, cfg.main.prefix_tag, COL.WHITE, 'Для просмотра всех команд пропишите -> ', COL.ORANGE, '/athelp'))
-end
-
 local function sequence_for(id, steps)
   local delay = tonumber(cfg.main.delay_ms or 1500)
   lua_thread.create(function()
@@ -137,22 +130,56 @@ end
 function handle_command(name, arg)
   local id = parse_id(arg)
 
+  if name == 'ah' then
+    local args = {}
+    for word in arg:gmatch('%S+') do table.insert(args, word) end
+
+    local id = tonumber(args[1])
+    local page = tonumber(args[2]) or 2
+
+    if not id then
+      chat(COL.RED .. 'Использование: /ah [id] [1 - ники | 2 - наказания]')
+      return
+    end
+    if not sampIsPlayerConnected(id) then
+      chat(COL.RED .. 'Игрок с таким ID не найден или оффлайн.')
+      return
+    end
+
+    local nickname = sampGetPlayerNickname(id)
+    if not nickname then
+      chat(COL.RED .. 'Не удалось получить никнейм игрока.')
+      return
+    end
+
+    send_cmd(string.format('/ahistory %s %d', nickname, page))
+    return
+  end
+
   if name == 'athelp' then
     local title = string.format('%s[ONYX AdminTools]', COL.ORANGE)
     local sub = string.format('%sНиже перечислены все команды скрипта\n%sАвтор: %s%s\n\nСделано с любовью для %sONYX Role Play 0.3.7\n\n',
       COL.WHITE, COL.WHITE, COL.WHITE, cfg.texts.author_name, COL.ORANGE)
 
-    local auto, jail, mute = '', '', ''
+    local auto, jail, mute, info = '', '', '', ''
     for cmd, desc in pairs(cfg.descriptions) do
       local line = string.format('%sКоманда %s/%s %s- %s\n', COL.WHITE, COL.GRAY, cmd, COL.WHITE, desc)
-      if cmd == 'lid' or cmd == 'admin' or cmd == 'helper' or cmd == 'spt' or cmd:find('offtop') then auto = auto .. line
-      elseif cmd == 'caps' or cmd == 'flood' or cmd == 'mg' or cmd == 'adeq' or cmd:match('osk') then mute = mute .. line
-      elseif cmd ~= 'athelp' and cmd ~= 'atrel' then jail = jail .. line end
+      if cmd == 'lid' or cmd == 'admin' or cmd == 'helper' or cmd == 'spt' or cmd:find('offtop') then
+        auto = auto .. line
+      elseif cmd == 'caps' or cmd == 'flood' or cmd == 'mg' or cmd == 'adeq' or cmd:match('osk') then
+        mute = mute .. line
+      elseif cmd == 'ah' then
+        info = info .. line
+      elseif cmd ~= 'athelp' and cmd ~= 'atrel' then
+        jail = jail .. line
+      end
     end
 
     local body = COL.ORANGE .. 'Автоответы по репортам:\n' .. auto .. '\n'
-              .. COL.ORANGE .. 'Тюремные наказания:\n' .. jail .. '\n'
-              .. COL.ORANGE .. 'Наказания лишающие права писать в чат:\n' .. mute .. '\n'
+               .. COL.ORANGE .. 'Тюремные наказания:\n' .. jail .. '\n'
+               .. COL.ORANGE .. 'Наказания лишающие права писать в чат:\n' .. mute .. '\n'
+               .. COL.ORANGE .. 'Информация об игроке:\n' .. info .. '\n'
+
     sampShowDialog(DIALOG_ID, title, sub .. body, 'ОК', '')
     return
   end
@@ -201,9 +228,14 @@ end
 function main()
   while not isSampAvailable() do wait(250) end
   if not load_config() then chat(COL.RED .. 'Ошибка загрузки конфигурации!') return end
-  show_connect_banner_once()
+  if not banner_shown and cfg.main.show_connect_msg then
+    chat(string.format('%s%s %s%s', COL.ORANGE, cfg.main.prefix_tag, COL.WHITE, 'Успешно подключён!'))
+    chat(string.format('%s%s %s%s %s%s', COL.ORANGE, cfg.main.prefix_tag, COL.WHITE, 'Скрипт был разработан: ', COL.ORANGE, cfg.texts.author_name))
+    chat(string.format('%s%s %s%s %s%s', COL.ORANGE, cfg.main.prefix_tag, COL.WHITE, 'Для просмотра всех команд пропишите -> ', COL.ORANGE, '/athelp'))
+    banner_shown = true
+  end
   local commands = {
-    'athelp','atrel','lid','admin','helper','spt',
+    'athelp','atrel','lid','admin','helper','spt','ah',
     'dm','dmzz','mdm','db','mdb','tk','sk','rk','sanim','nrd','sriv',
     'caps','flood','mg','adeq','oskp','oska','oskf',
     'offtop1','offtop2'
